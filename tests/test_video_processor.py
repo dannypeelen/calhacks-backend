@@ -4,7 +4,7 @@ import os
 import time
 import pytest
 
-from starlette.datastructures import UploadFile
+from fastapi import UploadFile
 
 from app.services.video_processor import process_webcam_frame, process_uploaded_video
 
@@ -36,4 +36,3 @@ async def test_process_uploaded_video(tmp_path, monkeypatch):
     assert out["ok"] is True
     assert out["bytes"] == len(content)
     assert os.path.exists(out["saved_path"])  
-

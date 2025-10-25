@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 import base64
 import json
 
-from app.main import app
+from main import app
 
 
 def test_livekit_token_and_join(monkeypatch):

@@ -3,12 +3,10 @@ Analyzer: orchestrates per-frame model calls and fuses outputs.
 
 Minimal async implementation that:
 - Accepts flexible input describing frames (base64, path list from video_processor, or single path).
-- Calls Baseten-backed theft detector (model_theft.detect_theft).
-- Optionally calls a Baseten weapon endpoint if configured.
+- Calls Baseten-backed theft and weapon detectors via async model helpers.
 - Produces a compact, analyzer-friendly result per frame plus a naive threat score.
 
 Notes:
-- Baseten client is synchronous (requests); we offload calls to a thread to avoid blocking the event loop.
 - This is intentionally light; plug in Fetch.AI agents and a richer fusion/scoring scheme later.
 """
 
@@ -16,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional

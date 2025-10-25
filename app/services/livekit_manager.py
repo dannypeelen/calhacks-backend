@@ -68,7 +68,7 @@ class LiveKitManager:
     def create_join_token(self, room_name: str, identity: Optional[str] = None) -> str:
         """Create an access token for a client or backend bot to join a room."""
         if lk_api is None:
-            raise RuntimeError("livekit-server-sdk not available")
+            raise RuntimeError("livekit.api not available; ensure 'livekit'/'livekit-api' is installed")
 
         identity = identity or f"sentri-backend-{uuid.uuid4()}"
         at = lk_api.AccessToken(
@@ -91,7 +91,7 @@ class LiveKitManager:
         Returns a session_id to manage lifecycle from the API route.
         """
         if lk_rtc is None:
-            raise RuntimeError("livekit-rtc not available; install livekit-rtc or livekit-agents")
+            raise RuntimeError("livekit.rtc not available; install 'livekit-rtc'")
 
         session_id = str(uuid.uuid4())
         identity = identity or f"sentri-backend-{session_id}"

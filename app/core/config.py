@@ -1,7 +1,13 @@
 import os
 from functools import lru_cache
-from pydantic import BaseSettings
 from dotenv import load_dotenv
+try:
+    # Pydantic v2+ location
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+except Exception:  # pragma: no cover
+    # Fallback for older environments (v1) if needed
+    from pydantic import BaseSettings  # type: ignore
+    SettingsConfigDict = dict  # type: ignore
 
 
 class Settings(BaseSettings):
@@ -12,10 +18,8 @@ class Settings(BaseSettings):
 
     # General
     ENV: str = os.getenv("ENV", "development")
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # Pydantic v2 config
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 
 @lru_cache(maxsize=1)
