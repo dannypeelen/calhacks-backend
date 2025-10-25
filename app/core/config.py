@@ -16,10 +16,22 @@ class Settings(BaseSettings):
     LIVEKIT_API_KEY: str = ""
     LIVEKIT_API_SECRET: str = ""
 
+    # Baseten
+    BASETEN_API_KEY: str = ""
+    BASETEN_THEFT_ENDPOINT: str = ""
+    BASETEN_WEAPON_ENDPOINT: str = ""
+
+    # Optional LLMs
+    CLAUDE_KEY: str = ""
+
     # General
     ENV: str = os.getenv("ENV", "development")
     # Pydantic v2 config
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 @lru_cache(maxsize=1)
