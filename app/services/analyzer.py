@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.core.logger import get_logger
-from app.models.model_theft import async_detect_theft, format_for_analysis
-from app.models.model_weapon import async_detect_weapon
+from app.models import model_theft as theft_model
+from app.models import model_weapon as weapon_model
 
 log = get_logger(__name__)
 
@@ -84,7 +84,7 @@ async def _call_baseten_weapon(image_b64: str, extra_input: Optional[Dict[str, A
         img_bytes = base64.b64decode(image_b64)
     except Exception:
         return {"ok": False, "error": "invalid_base64"}
-    return await async_detect_weapon(img_bytes, **(extra_input or {}))
+    return await weapon_model.async_detect_weapon(img_bytes, **(extra_input or {}))
 
 
 def _to_b64_from_path(path: str) -> str:
@@ -142,8 +142,8 @@ async def analyze_video(video: Any) -> Dict[str, Any]:
             image_b64 = _to_b64_from_path(str(item.path))
 
         # Theft detection (fully async)
-        theft_res = await async_detect_theft(base64.b64decode(image_b64))
-        theft_for_analysis = format_for_analysis(theft_res)
+        theft_res = await theft_model.async_detect_theft(base64.b64decode(image_b64))
+        theft_for_analysis = theft_model.format_for_analysis(theft_res)
 
         # Weapon detection (optional Baseten endpoint)
         weapon_res = await _call_baseten_weapon(image_b64)
