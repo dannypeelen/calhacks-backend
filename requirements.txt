@@ -1,1 +1,15 @@
-
+fastapi
+uvicorn
+requests
+pydantic
+python-multipart
+aiofiles
+pillow
+opencv-python
+python-dotenv
+truss
+transformers
+gradio_client
+inference
+livekit-server-sdk
+anthropic
