@@ -1,31 +1,78 @@
-from inference import get_model
+"""
+Baseten-backed weapon detection over single frames.
 
-model = get_model("weapon-qpfo8/1")
+Provides sync and async helpers similar to model_theft to keep analyzer
+integration consistent.
+"""
 
-image_src = "" #TODO: add path here
+from __future__ import annotations
 
-results = model.infer(image_src)
+import base64
+import io
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional
+import asyncio
+
+import cv2  # type: ignore
+import numpy as np  # type: ignore
+
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover
+    Image = None  # type: ignore
+
+from app.core.logger import get_logger
+from app.services.baseten_client import get_baseten_client
+
+log = get_logger(__name__)
 
 
-#This will VISUALIZE the results, if needed
-#==================================================================
+def _to_jpeg_bytes(frame: Any) -> bytes:
+    if isinstance(frame, (str, Path)):
+        return Path(frame).read_bytes()
+    if isinstance(frame, (bytes, bytearray)):
+        return bytes(frame)
+    if isinstance(frame, np.ndarray):
+        arr = frame
+        if arr.dtype != np.uint8:
+            arr = arr.astype(np.uint8)
+        if arr.ndim == 2:
+            arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
+        ok, enc = cv2.imencode(".jpg", arr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        if not ok:
+            raise ValueError("Failed to encode frame to JPEG")
+        return enc.tobytes()
+    if Image is not None and isinstance(frame, Image.Image):
+        buf = io.BytesIO()
+        frame.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
+    raise TypeError("Unsupported frame type")
 
-# import cv2
-# import supervision as sv
 
-# # Load the image for visualization (if not already loaded)
-# image_np = cv2.imread(image_source)
+def detect_weapon(frame: Any, endpoint: Optional[str] = None, **extra) -> Dict[str, Any]:
+    try:
+        jpeg = _to_jpeg_bytes(frame)
+    except Exception as e:
+        log.exception("weapon: frame prep failed: %s", e)
+        return {"ok": False, "error": "Failed to prepare frame"}
+    image_b64 = base64.b64encode(jpeg).decode()
+    endpoint_url = endpoint or os.getenv("BASETEN_WEAPON_ENDPOINT", "")
+    client = get_baseten_client()
+    resp = client.predict_image(endpoint_url, image_b64, extra or None)
+    det = resp.get("detections") or resp.get("output") or resp.get("result")
+    return {"ok": bool(resp.get("ok", True)), "model": "baseten:weapon", "detections": det, "raw": resp}
 
-# # Convert results to Supervision Detections format
-# detections = sv.Detections.from_inference(results)
 
-# # Create a bounding box annotator
-# box_annotator = sv.BoxAnnotator()
-
-# # Annotate the image
-# annotated_image = box_annotator.annotate(scene=image_np.copy(), detections=detections)
-
-# # Display or save the annotated image
-# cv2.imshow("Inference Results", annotated_image)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
+async def async_detect_weapon(frame: Any, endpoint: Optional[str] = None, **extra) -> Dict[str, Any]:
+    try:
+        jpeg = await asyncio.to_thread(_to_jpeg_bytes, frame)
+    except Exception as e:
+        log.exception("weapon: frame prep failed (async): %s", e)
+        return {"ok": False, "error": "Failed to prepare frame"}
+    image_b64 = base64.b64encode(jpeg).decode()
+    endpoint_url = endpoint or os.getenv("BASETEN_WEAPON_ENDPOINT", "")
+    client = get_baseten_client()
+    resp = await client.apredict_image(endpoint_url, image_b64, extra or None)
+    det = resp.get("detections") or resp.get("output") or resp.get("result")
+    return {"ok": bool(resp.get("ok", True)), "model": "baseten:weapon", "detections": det, "raw": resp}

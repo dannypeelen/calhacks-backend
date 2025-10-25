@@ -11,5 +11,8 @@ truss
 transformers
 gradio_client
 inference
+httpx
 livekit-server-sdk
+livekit-agents
+livekit-rtc
 anthropic

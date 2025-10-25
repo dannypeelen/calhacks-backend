@@ -1,7 +1,8 @@
-from fastapi import APIRouter, File, UploadFile, WebSocket
+from fastapi import APIRouter, File, UploadFile, WebSocket, HTTPException
 from app.services.video_processor import process_uploaded_video, process_webcam_frame
 from app.services.livekit_manager import get_livekit_manager
 from app.core.logger import get_logger
+from app.core.config import get_settings
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -87,3 +88,38 @@ async def video_stream(websocket: WebSocket):
                 await lk.stop_room_session(active_session)
             except Exception:
                 log.exception("Failed to stop LiveKit session %s", active_session)
+
+
+@router.post("/livekit/token")
+def get_livekit_token(room: str, identity: str | None = None):
+    """Mint a LiveKit access token for the frontend to join a room.
+
+    Do not expose server secrets to clients; this endpoint signs a JWT using
+    LIVEKIT_API_KEY/SECRET and returns only the token. The client should use
+    this token with the LIVEKIT_URL to join the room via @livekit/client.
+    """
+    try:
+        lk = get_livekit_manager()
+        token = lk.create_join_token(room_name=room, identity=identity)
+        return {"token": token}
+    except Exception as e:
+        log.exception("Failed to mint LiveKit token: %s", e)
+        raise HTTPException(status_code=500, detail="Token minting failed")
+
+
+@router.get("/livekit/join")
+def get_livekit_join(room: str, identity: str | None = None):
+    """Return both LiveKit URL and a signed token for clients.
+
+    Frontends can call this to obtain the `url` and `token` pair required by
+    `@livekit/client` when joining a room. Keep this endpoint authenticated in
+    production and validate the requested room/identity.
+    """
+    try:
+        settings = get_settings()
+        lk = get_livekit_manager()
+        token = lk.create_join_token(room_name=room, identity=identity)
+        return {"url": settings.LIVEKIT_URL, "token": token}
+    except Exception as e:
+        log.exception("Failed to prepare LiveKit join info: %s", e)
+        raise HTTPException(status_code=500, detail="Join info failed")

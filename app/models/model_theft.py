@@ -20,6 +20,7 @@ import io
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
+import asyncio
 
 import cv2  # type: ignore
 import numpy as np  # type: ignore
@@ -109,6 +110,37 @@ def detect_theft(
     }
     return result
 
+
+async def async_detect_theft(
+    frame: Any,
+    conf_thresh: float = 0.5,
+    endpoint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Async theft detection via Baseten.
+
+    Offloads CPU-bound JPEG encoding to a thread and uses the async Baseten
+    client to avoid blocking the event loop.
+    """
+    try:
+        jpeg_bytes = await asyncio.to_thread(_to_jpeg_bytes, frame)
+    except Exception as e:
+        log.exception("Failed to prepare frame (async): %s", e)
+        return {"ok": False, "error": "Failed to prepare frame"}
+
+    image_b64 = base64.b64encode(jpeg_bytes).decode()
+    endpoint_url = endpoint or os.getenv("BASETEN_THEFT_ENDPOINT", "")
+    client = get_baseten_client()
+
+    extra_input = {"conf_thresh": float(conf_thresh)}
+    resp = await client.apredict_image(endpoint_url, image_b64, extra_input=extra_input)
+
+    detections = resp.get("detections") or resp.get("output") or resp.get("result")
+    return {
+        "ok": bool(resp.get("ok", True)),
+        "model": "baseten:theft",
+        "detections": detections,
+        "raw": resp,
+    }
 
 def format_for_analysis(theft_result: Dict[str, Any]) -> Dict[str, Any]:
     """Adapter to analyzer input shape once defined.

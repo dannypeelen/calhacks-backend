@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.core.logger import get_logger
-from app.services.baseten_client import get_baseten_client
-from app.models.model_theft import detect_theft, format_for_analysis
+from app.models.model_theft import async_detect_theft, format_for_analysis
+from app.models.model_weapon import async_detect_weapon
 
 log = get_logger(__name__)
 
@@ -81,13 +81,13 @@ def _gather_frames_from_input(video: Any, limit: int = 10) -> List[FrameItem]:
 
 
 async def _call_baseten_weapon(image_b64: str, extra_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Optional weapon detection via Baseten if endpoint is configured."""
-    endpoint = os.getenv("BASETEN_WEAPON_ENDPOINT", "")
-    if not endpoint:
-        return {"ok": False, "skipped": True, "reason": "endpoint_missing"}
-
-    client = get_baseten_client()
-    return await asyncio.to_thread(client.predict_image, endpoint, image_b64, extra_input or {})
+    """Weapon detection via Baseten model module (async)."""
+    # Pass raw bytes to async_detect_weapon for consistent preprocessing
+    try:
+        img_bytes = base64.b64decode(image_b64)
+    except Exception:
+        return {"ok": False, "error": "invalid_base64"}
+    return await async_detect_weapon(img_bytes, **(extra_input or {}))
 
 
 def _to_b64_from_path(path: str) -> str:
@@ -144,8 +144,8 @@ async def analyze_video(video: Any) -> Dict[str, Any]:
         else:
             image_b64 = _to_b64_from_path(str(item.path))
 
-        # Theft detection (sync -> offload)
-        theft_res = await asyncio.to_thread(detect_theft, base64.b64decode(image_b64))
+        # Theft detection (fully async)
+        theft_res = await async_detect_theft(base64.b64decode(image_b64))
         theft_for_analysis = format_for_analysis(theft_res)
 
         # Weapon detection (optional Baseten endpoint)

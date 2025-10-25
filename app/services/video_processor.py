@@ -117,27 +117,25 @@ async def process_webcam_frame(frame_data: str) -> Dict[str, Any]:
 
     # Persist the raw frame for later analysis
     frame_id = str(uuid.uuid4())
-    # 1 FPS throttle for live stream
+    # 1 FPS throttle for live stream; only save/process when not throttled
     global _last_stream_process_ts
     now = time.time()
-    throttled = False
-    if now - _last_stream_process_ts < 1.0:
-        throttled = True
+    throttled = now - _last_stream_process_ts < 1.0
 
-    out_path = TMP_DIR / f"frame_{frame_id}.{inferred_format}"
-    try:
-        out_path.write_bytes(blob)
-    except Exception as e:
-        log.exception("Failed to write webcam frame: %s", e)
-        return {"ok": False, "error": "Failed to persist frame"}
-
+    out_path = None
     if not throttled:
+        out_path = TMP_DIR / f"frame_{frame_id}.{inferred_format}"
+        try:
+            out_path.write_bytes(blob)
+        except Exception as e:
+            log.exception("Failed to write webcam frame: %s", e)
+            return {"ok": False, "error": "Failed to persist frame"}
         _last_stream_process_ts = now
 
     return {
         "ok": True,
         "frame_id": frame_id,
-        "saved_path": str(out_path),
+        "saved_path": str(out_path) if out_path else None,
         "image_size": img_size,  # None when not parsable
         "throttled": throttled,
         "hint": "1 FPS processing. Models can read from saved_path.",

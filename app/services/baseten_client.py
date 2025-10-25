@@ -13,7 +13,8 @@ import base64
 import os
 from typing import Any, Dict, Optional
 
-import requests
+import asyncio
+import httpx
 
 from app.core.logger import get_logger
 
@@ -21,13 +22,20 @@ log = get_logger(__name__)
 
 
 class BasetenClient:
-    def __init__(self, api_key: Optional[str] = None) -> None:
+    def __init__(self, api_key: Optional[str] = None, timeout: float = 15.0) -> None:
         self.api_key = api_key or os.getenv("BASETEN_API_KEY", "")
+        self._timeout = timeout
+        self._aclient: Optional[httpx.AsyncClient] = None
 
-    def predict_image(
+    def _get_async_client(self) -> httpx.AsyncClient:
+        if self._aclient is None:
+            self._aclient = httpx.AsyncClient(timeout=self._timeout)
+        return self._aclient
+
+    async def apredict_image(
         self, endpoint_url: str, image_b64: str, extra_input: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Send a single image to a Baseten model endpoint.
+        """Async: Send a single image to a Baseten model endpoint using httpx.
 
         Args:
             endpoint_url: Full Baseten model inference URL (e.g., from env).
@@ -49,7 +57,8 @@ class BasetenClient:
             payload["input"].update(extra_input)
 
         try:
-            resp = requests.post(endpoint_url, json=payload, headers=headers, timeout=15)
+            client = self._get_async_client()
+            resp = await client.post(endpoint_url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
             data.setdefault("ok", True)
@@ -57,6 +66,21 @@ class BasetenClient:
         except Exception as e:
             log.exception("Baseten request failed: %s", e)
             return {"ok": False, "error": "Baseten request failed"}
+
+    def predict_image(
+        self, endpoint_url: str, image_b64: str, extra_input: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Blocking wrapper around apredict_image.
+
+        Safe to call from worker threads (e.g., asyncio.to_thread). Avoid calling
+        from the main event loop context directly.
+        """
+        return asyncio.run(self.apredict_image(endpoint_url, image_b64, extra_input))
+
+    async def aclose(self) -> None:
+        if self._aclient is not None:
+            await self._aclient.aclose()
+            self._aclient = None
 
 
 _client: Optional[BasetenClient] = None
