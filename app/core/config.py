@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     BASETEN_API_KEY: str = ""
     BASETEN_THEFT_ENDPOINT: str = ""
     BASETEN_WEAPON_ENDPOINT: str = ""
+    BASETEN_FACE_ENDPOINT: str = ""
 
     # Optional LLMs
     CLAUDE_KEY: str = ""

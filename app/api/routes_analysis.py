@@ -3,6 +3,7 @@ from app.services.analyzer import analyze_video
 from app.schemas.video import VideoInput
 from app.models.model_theft import async_detect_theft
 from app.models.model_weapon import async_detect_weapon
+from app.models.model_face_detection import async_detect_face
 from pathlib import Path
 import base64
 
@@ -77,4 +78,12 @@ async def detect_weapon_only(video: VideoInput):
     """Run only the weapon detector on the given frame and return its raw result."""
     img = _first_image_bytes(video)
     result = await async_detect_weapon(img)
+    return result
+
+
+@router.post("/face")
+async def detect_face_only(video: VideoInput):
+    """Run only the face detector on the given frame and return its raw result."""
+    img = _first_image_bytes(video)
+    result = await async_detect_face(img)
     return result

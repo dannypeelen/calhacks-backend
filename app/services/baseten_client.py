@@ -1,10 +1,9 @@
 """
-Lightweight Baseten client wrapper.
+Baseten client wrapper (async, httpx) with convenience helpers per model.
 
-Provides a minimal, production-leaning API to send image frames to a Baseten
-model endpoint using REST. The actual endpoint URL and API key are supplied via
-environment variables, allowing different models (e.g., theft, weapon) to have
-independent endpoints.
+Supports generic image prediction and typed helpers for specific models in
+this app: theft, weapon, and face detection. Endpoints and API key are loaded
+from environment variables via app.core.config.get_settings.
 """
 
 from __future__ import annotations
@@ -15,8 +14,10 @@ from typing import Any, Dict, Optional
 
 import asyncio
 import httpx
+import base64
 
 from app.core.logger import get_logger
+from app.core.config import get_settings
 
 log = get_logger(__name__)
 
@@ -26,6 +27,7 @@ class BasetenClient:
         self.api_key = api_key or os.getenv("BASETEN_API_KEY", "")
         self._timeout = timeout
         self._aclient: Optional[httpx.AsyncClient] = None
+        self._settings = get_settings()
 
     def _get_async_client(self) -> httpx.AsyncClient:
         if self._aclient is None:
@@ -66,6 +68,27 @@ class BasetenClient:
         except Exception as e:
             log.exception("Baseten request failed: %s", e)
             return {"ok": False, "error": "Baseten request failed"}
+
+    # -------------------------
+    # Convenience wrappers
+    # -------------------------
+    async def apredict_theft(self, image_b64: str, conf_thresh: float = 0.5) -> Dict[str, Any]:
+        url = self._settings.BASETEN_THEFT_ENDPOINT or os.getenv("BASETEN_THEFT_ENDPOINT", "")
+        extra = {"conf_thresh": float(conf_thresh)}
+        return await self.apredict_image(url, image_b64, extra)
+
+    async def apredict_weapon(self, image_b64: str, **extra: Any) -> Dict[str, Any]:
+        url = self._settings.BASETEN_WEAPON_ENDPOINT or os.getenv("BASETEN_WEAPON_ENDPOINT", "")
+        return await self.apredict_image(url, image_b64, extra or None)
+
+    async def apredict_face(self, image_b64: str, **extra: Any) -> Dict[str, Any]:
+        url = self._settings.BASETEN_FACE_ENDPOINT or os.getenv("BASETEN_FACE_ENDPOINT", "")
+        return await self.apredict_image(url, image_b64, extra or None)
+
+    async def apredict_image_bytes(self, endpoint_url: str, image_bytes: bytes, extra_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Helper that base64-encodes raw bytes before calling apredict_image."""
+        image_b64 = base64.b64encode(image_bytes).decode()
+        return await self.apredict_image(endpoint_url, image_b64, extra_input)
 
     def predict_image(
         self, endpoint_url: str, image_b64: str, extra_input: Optional[Dict[str, Any]] = None
