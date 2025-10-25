@@ -30,6 +30,7 @@ except Exception:  # pragma: no cover - optional at runtime
 
 # Workspace-local temp directory for uploads/frames
 from app.core.logger import get_logger
+from app.workers.background_tasks import enqueue_analyze_frames
 
 TMP_DIR = Path(os.getenv("SENTRIAI_TMP", "./.tmp"))
 TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -68,12 +69,16 @@ async def process_uploaded_video(file: UploadFile) -> Dict[str, Any]:
 
     # Extract up to N frames at ~1 FPS for downstream model reads
     frames_info: Dict[str, Any] = {"count": 0, "paths": []}
+    job_id = None
     try:
         frames = _extract_frames_1fps(str(dest), session_id=session_id, max_frames=10)
         frames_info = {"count": len(frames), "paths": frames}
+        if frames:
+            # Enqueue offline analysis of sampled frames
+            job_id = await enqueue_analyze_frames(session_id, frames)
     except Exception as e:
         # Log but do not fail the upload; analysis can still run later
-        log.exception("Frame extraction failed: %s", e)
+        log.exception("Frame extraction or enqueue failed: %s", e)
 
     return {
         "ok": True,
@@ -82,7 +87,8 @@ async def process_uploaded_video(file: UploadFile) -> Dict[str, Any]:
         "saved_path": str(dest),
         "bytes": size,
         "frames": frames_info,
-        "note": "Saved and sampled at ~1 FPS for model ingestion.",
+        "job_id": job_id,
+        "note": "Saved and sampled at ~1 FPS for model ingestion; analysis enqueued if frames available.",
     }
 
 
