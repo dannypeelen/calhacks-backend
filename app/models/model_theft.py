@@ -31,9 +31,11 @@ except Exception:  # pragma: no cover
     Image = None  # type: ignore
 
 from app.core.logger import get_logger
+from app.core.config import get_settings
 from app.services.baseten_client import get_baseten_client
 
 log = get_logger(__name__)
+_settings = get_settings()
 
 
 def _to_jpeg_bytes(frame: Any) -> bytes:
@@ -94,7 +96,7 @@ def detect_theft(
         return {"ok": False, "error": "Failed to prepare frame"}
 
     image_b64 = base64.b64encode(jpeg_bytes).decode()
-    endpoint_url = endpoint or os.getenv("BASETEN_THEFT_ENDPOINT", "")
+    endpoint_url = endpoint or _settings.BASETEN_THEFT_ENDPOINT or os.getenv("BASETEN_THEFT_ENDPOINT", "")
     client = get_baseten_client()
 
     extra_input = {"conf_thresh": float(conf_thresh)}
@@ -128,7 +130,7 @@ async def async_detect_theft(
         return {"ok": False, "error": "Failed to prepare frame"}
 
     image_b64 = base64.b64encode(jpeg_bytes).decode()
-    endpoint_url = endpoint or os.getenv("BASETEN_THEFT_ENDPOINT", "")
+    endpoint_url = endpoint or _settings.BASETEN_THEFT_ENDPOINT or os.getenv("BASETEN_THEFT_ENDPOINT", "")
     client = get_baseten_client()
 
     extra_input = {"conf_thresh": float(conf_thresh)}

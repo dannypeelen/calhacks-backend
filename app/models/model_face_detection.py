@@ -22,9 +22,11 @@ except Exception:  # pragma: no cover
     Image = None  # type: ignore
 
 from app.core.logger import get_logger
+from app.core.config import get_settings
 from app.services.baseten_client import get_baseten_client
 
 log = get_logger(__name__)
+_settings = get_settings()
 
 
 def _to_jpeg_bytes(frame: Any) -> bytes:
@@ -58,8 +60,9 @@ def detect_face(frame: Any, endpoint: Optional[str] = None, **extra) -> Dict[str
     image_b64 = base64.b64encode(jpeg).decode()
     # Prefer env-configured endpoint via client helper if endpoint not given
     client = get_baseten_client()
-    if endpoint:
-        resp = asyncio.run(client.apredict_image(endpoint, image_b64, extra or None))
+    resolved = endpoint or _settings.BASETEN_FACE_ENDPOINT or os.getenv("BASETEN_FACE_ENDPOINT", "")
+    if resolved:
+        resp = asyncio.run(client.apredict_image(resolved, image_b64, extra or None))
     else:
         resp = asyncio.run(client.apredict_face(image_b64, **extra))
     det = resp.get("detections") or resp.get("output") or resp.get("result")
@@ -74,8 +77,9 @@ async def async_detect_face(frame: Any, endpoint: Optional[str] = None, **extra)
         return {"ok": False, "error": "Failed to prepare frame"}
     image_b64 = base64.b64encode(jpeg).decode()
     client = get_baseten_client()
-    if endpoint:
-        resp = await client.apredict_image(endpoint, image_b64, extra or None)
+    resolved = endpoint or _settings.BASETEN_FACE_ENDPOINT or os.getenv("BASETEN_FACE_ENDPOINT", "")
+    if resolved:
+        resp = await client.apredict_image(resolved, image_b64, extra or None)
     else:
         resp = await client.apredict_face(image_b64, **extra)
     det = resp.get("detections") or resp.get("output") or resp.get("result")

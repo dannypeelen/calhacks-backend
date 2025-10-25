@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional
 
 import asyncio
 import httpx
-import base64
 
 from app.core.logger import get_logger
 from app.core.config import get_settings
@@ -24,10 +23,11 @@ log = get_logger(__name__)
 
 class BasetenClient:
     def __init__(self, api_key: Optional[str] = None, timeout: float = 15.0) -> None:
-        self.api_key = api_key or os.getenv("BASETEN_API_KEY", "")
+        self._settings = get_settings()
+        # Prefer explicit arg, then settings, then env var (fallback)
+        self.api_key = api_key or self._settings.BASETEN_API_KEY or os.getenv("BASETEN_API_KEY", "")
         self._timeout = timeout
         self._aclient: Optional[httpx.AsyncClient] = None
-        self._settings = get_settings()
 
     def _get_async_client(self) -> httpx.AsyncClient:
         if self._aclient is None:

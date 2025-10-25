@@ -1,13 +1,15 @@
 from fastapi import APIRouter, HTTPException, Query
 from app.services.analyzer import analyze_video
 from app.schemas.video import VideoInput
-from app.models.model_theft import async_detect_theft
-from app.models.model_weapon import async_detect_weapon
-from app.models.model_face_detection import async_detect_face
+from app.models import model_theft as theft_model
+from app.models import model_weapon as weapon_model
+from app.models import model_face_detection as face_model
+from app.core.logger import get_logger
 from pathlib import Path
 import base64
 
 router = APIRouter()
+log = get_logger(__name__)
 
 @router.post("/run")
 async def run_analysis(video: VideoInput):
@@ -69,7 +71,7 @@ def _first_image_bytes(video: VideoInput) -> bytes:
 async def detect_theft_only(video: VideoInput, conf_thresh: float = Query(0.5, ge=0.0, le=1.0)):
     """Run only the theft detector on the given frame and return its raw result."""
     img = _first_image_bytes(video)
-    result = await async_detect_theft(img, conf_thresh=conf_thresh)
+    result = await theft_model.async_detect_theft(img, conf_thresh=conf_thresh)
     return result
 
 
@@ -77,7 +79,7 @@ async def detect_theft_only(video: VideoInput, conf_thresh: float = Query(0.5, g
 async def detect_weapon_only(video: VideoInput):
     """Run only the weapon detector on the given frame and return its raw result."""
     img = _first_image_bytes(video)
-    result = await async_detect_weapon(img)
+    result = await weapon_model.async_detect_weapon(img)
     return result
 
 
@@ -85,5 +87,31 @@ async def detect_weapon_only(video: VideoInput):
 async def detect_face_only(video: VideoInput):
     """Run only the face detector on the given frame and return its raw result."""
     img = _first_image_bytes(video)
-    result = await async_detect_face(img)
+    result = await face_model.async_detect_face(img)
     return result
+
+
+@router.post("/debug/baseten")
+async def debug_baseten_models(video: VideoInput, conf_thresh: float = Query(0.5, ge=0.0, le=1.0)):
+    """Call all Baseten-backed models, print their raw responses, and return them."""
+    img = _first_image_bytes(video)
+
+    theft_res = await theft_model.async_detect_theft(img, conf_thresh=conf_thresh)
+    weapon_res = await weapon_model.async_detect_weapon(img)
+    face_res = await face_model.async_detect_face(img)
+
+    log.info("[Baseten Debug] Theft ok=%s raw=%s", theft_res.get("ok"), theft_res.get("raw"))
+    log.info("[Baseten Debug] Weapon ok=%s raw=%s", weapon_res.get("ok"), weapon_res.get("raw"))
+    log.info("[Baseten Debug] Face ok=%s raw=%s", face_res.get("ok"), face_res.get("raw"))
+
+    all_ok = all(res.get("ok") for res in (theft_res, weapon_res, face_res))
+    message = "All Baseten models responded successfully" if all_ok else "One or more Baseten models reported errors"
+
+    return {
+        "message": message,
+        "results": {
+            "theft": theft_res,
+            "weapon": weapon_res,
+            "face": face_res,
+        }
+    }

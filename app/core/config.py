@@ -12,15 +12,16 @@ except Exception:  # pragma: no cover
 
 class Settings(BaseSettings):
     # LiveKit
-    LIVEKIT_URL: str = ""
-    LIVEKIT_API_KEY: str = ""
-    LIVEKIT_API_SECRET: str = ""
+    LIVEKIT_URL: str = "wss://first-project-f84ekuzh.livekit.cloud"
+    LIVEKIT_API_KEY: str = "APIfD4sebB8mLTJ"
+    LIVEKIT_API_SECRET: str = "fdPTWk30DnkOSECLZmJXP4fTi0blogF6WeDt1nu0CZYA"
 
     # Baseten
-    BASETEN_API_KEY: str = ""
-    BASETEN_THEFT_ENDPOINT: str = ""
-    BASETEN_WEAPON_ENDPOINT: str = ""
-    BASETEN_FACE_ENDPOINT: str = ""
+    BASETEN_API_KEY: str = "9KudnXAF.iEOJDfr5AH3HxAP2OSWTnWPVGP7IbYNf"
+    BASETEN_THEFT_ENDPOINT: str = "https://model-zq8n19pq.api.baseten.co/development/predict"
+    BASETEN_WEAPON_ENDPOINT: str = "https://model-232y9o0q.api.baseten.co/development/predict"
+    BASETEN_FACE_ENDPOINT: str = "https://model-vq0n8m4w.api.baseten.co/development/predict"
+
 
     # Optional LLMs
     CLAUDE_KEY: str = ""

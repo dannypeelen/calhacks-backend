@@ -1,41 +1,55 @@
-import asyncio
 import pytest
 
-from app.services.baseten_client import BasetenClient
 
-
-class _Resp:
+class FakeClient:
     def __init__(self, payload):
-        self._payload = payload
+        self.payload = payload
 
-    def raise_for_status(self):
-        return None
+    async def apredict_image(self, endpoint_url, image_b64, extra_input=None):
+        return dict(self.payload)
 
-    def json(self):
-        return self._payload
-
-
-class _AsyncClientStub:
-    def __init__(self, payload):
-        self._payload = payload
-
-    async def post(self, *args, **kwargs):
-        return _Resp(self._payload)
+    async def apredict_face(self, image_b64, **extra):
+        return dict(self.payload)
 
 
 @pytest.mark.asyncio
-async def test_apredict_image_success(monkeypatch):
-    payload = {"result": {"score": 0.9}}
-    c = BasetenClient(api_key="x")
-    monkeypatch.setattr(c, "_get_async_client", lambda: _AsyncClientStub(payload))
-    out = await c.apredict_image("https://example.com/infer", "abcd")
-    assert out.get("ok") is True
-    assert out.get("result", {}).get("score") == 0.9
+async def test_model_theft_adapter_returns_normalized(monkeypatch):
+    from app.models import model_theft
+
+    payload = {"result": {"score": 0.66, "label": "theft"}}
+    monkeypatch.setattr(model_theft, "get_baseten_client", lambda: FakeClient(payload))
+
+    # Provide raw bytes; adapter handles base64 + client call
+    out = await model_theft.async_detect_theft(b"bytes")
+    assert out["ok"] is True
+    assert out["model"] == "baseten:theft"
+    assert out["detections"] == payload["result"]
+    assert out["raw"] == payload
 
 
 @pytest.mark.asyncio
-async def test_apredict_image_missing_endpoint():
-    c = BasetenClient(api_key="x")
-    out = await c.apredict_image("", "abcd")
-    assert out["ok"] is False
-    assert "endpoint" in out["error"]
+async def test_model_weapon_adapter_returns_normalized(monkeypatch):
+    from app.models import model_weapon
+
+    payload = {"result": {"score": 0.25, "label": "weapon"}}
+    monkeypatch.setattr(model_weapon, "get_baseten_client", lambda: FakeClient(payload))
+
+    out = await model_weapon.async_detect_weapon(b"bytes")
+    assert out["ok"] is True
+    assert out["model"] == "baseten:weapon"
+    assert out["detections"] == payload["result"]
+    assert out["raw"] == payload
+
+
+@pytest.mark.asyncio
+async def test_model_face_adapter_returns_normalized(monkeypatch):
+    from app.models import model_face_detection as model_face
+
+    payload = {"result": {"score": 0.9, "label": "face"}}
+    monkeypatch.setattr(model_face, "get_baseten_client", lambda: FakeClient(payload))
+
+    out = await model_face.async_detect_face(b"bytes")
+    assert out["ok"] is True
+    assert out["model"] == "baseten:face"
+    assert out["detections"] == payload["result"]
+    assert out["raw"] == payload
