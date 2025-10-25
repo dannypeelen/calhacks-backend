@@ -4,18 +4,14 @@ requests
 pydantic
 pydantic-settings
 python-multipart
-aiofiles
 pillow
 opencv-python
 python-dotenv
-truss
-sentencepiece>=0.1.99
-transformers==4.41.0
+# (removed unused heavy ML libs: truss, transformers, sentencepiece)
 #gradio_client
 httpx
 # livekit umbrella optional; core imports rely on these:
 livekit-api
-#livekit-rtc
 pytest
 pytest-asyncio
 ultralytics

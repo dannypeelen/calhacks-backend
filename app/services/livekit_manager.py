@@ -66,7 +66,12 @@ class LiveKitManager:
         self._sessions: Dict[str, LiveKitSession] = {}
 
     def create_join_token(self, room_name: str, identity: Optional[str] = None) -> str:
-        """Create an access token for a client or backend bot to join a room."""
+        """Create an access token for a client or backend bot to join a room.
+
+        Supports different livekit python SDK variants:
+        - Newer style: set `at.grants = VideoGrants(...)`
+        - Older style: `at.add_grant(VideoGrant(...))`
+        """
         if lk_api is None:
             raise RuntimeError("livekit.api not available; ensure 'livekit'/'livekit-api' is installed")
 
@@ -75,8 +80,19 @@ class LiveKitManager:
             api_key=self._settings.LIVEKIT_API_KEY,
             api_secret=self._settings.LIVEKIT_API_SECRET,
         )
-        at.add_grant(lk_api.VideoGrant(room=room_name, room_join=True))
         at.identity = identity
+
+        # Try modern grants API first
+        Grants = getattr(lk_api, "VideoGrants", None)
+        if Grants is not None:
+            at.grants = Grants(room=room_name, room_join=True)  # type: ignore[attr-defined]
+        else:
+            # Fallback to legacy add_grant API
+            Grant = getattr(lk_api, "VideoGrant", None)
+            if Grant is None or not hasattr(at, "add_grant"):
+                raise RuntimeError("Unsupported livekit token API: missing grant methods")
+            at.add_grant(Grant(room=room_name, room_join=True))  # type: ignore[attr-defined]
+
         token = at.to_jwt()
         return token
 
