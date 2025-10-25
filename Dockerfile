@@ -19,9 +19,9 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Install Python deps first for better Docker layer caching
-COPY requirements.txt ./
+COPY requirements-prod.txt ./
 RUN python -m pip install --upgrade pip wheel setuptools && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements-prod.txt
 
 # Copy application code
 COPY . /app
