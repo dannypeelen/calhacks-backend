@@ -16,11 +16,12 @@ Env:
 from __future__ import annotations
 
 import base64
+import binascii
 import io
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import asyncio
 
 import cv2  # type: ignore
@@ -49,10 +50,23 @@ def _to_jpeg_bytes(frame: Any) -> bytes:
     - PIL.Image.Image: encodes to JPEG
     """
     # Path-like
-    if isinstance(frame, (str, Path)):
-        p = Path(frame)
-        data = p.read_bytes()
-        return data
+    if isinstance(frame, Path):
+        return frame.read_bytes()
+
+    if isinstance(frame, str):
+        data_str = frame.strip()
+        maybe_data = data_str
+        if maybe_data.startswith("data:") and "," in maybe_data:
+            maybe_data = maybe_data.split(",", 1)[1]
+        try:
+            return base64.b64decode(maybe_data, validate=True)
+        except (binascii.Error, ValueError):
+            pass  # Not base64; fall back to filesystem
+
+        p = Path(data_str)
+        if not p.exists():
+            raise TypeError("String input must be a valid path or base64 data URI")
+        return p.read_bytes()
 
     # Raw bytes
     if isinstance(frame, (bytes, bytearray)):
@@ -167,14 +181,16 @@ def _normalize_response(resp: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _normalize_detections(detections: Any) -> list:
+def _normalize_detections(detections: Any) -> List[Dict[str, Any]]:
     """Force detections into a predictable list."""
     if isinstance(detections, dict):
         detections = [detections]
-    if not isinstance(detections, Sequence):
+    elif isinstance(detections, (list, tuple)):
+        detections = list(detections)
+    else:
         return []
 
-    normed = []
+    normed: List[Dict[str, Any]] = []
     for det in detections:
         if not isinstance(det, dict):
             continue
@@ -203,10 +219,19 @@ def _normalize_detections(detections: Any) -> list:
                 else None,
                 "confidence": _to_float(det.get("confidence") or det.get("conf") or det.get("score")),
                 "class_id": _to_int(det.get("class_id")),
-                "class_name": det.get("class_name") or str(det.get("class_id", "")),
+                "class_name": _class_name(det),
             }
         )
     return normed
+
+
+def _class_name(det: Dict[str, Any]) -> str:
+    if det.get("class_name"):
+        return str(det["class_name"])
+    class_id = det.get("class_id")
+    if class_id is None:
+        return "object"
+    return str(class_id)
 
 
 def _max_confidence(detections: Any) -> Optional[float]:
