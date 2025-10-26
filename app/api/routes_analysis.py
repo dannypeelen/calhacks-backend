@@ -7,6 +7,9 @@ from app.models import model_face_detection as face_model
 from app.core.logger import get_logger
 from pathlib import Path
 import base64
+import numpy as np
+import cv2
+from app.services.face_embedder import process_faces_from_frame
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -114,4 +117,48 @@ async def debug_baseten_models(video: VideoInput, conf_thresh: float = Query(0.5
             "weapon": weapon_res,
             "face": face_res,
         }
+    }
+
+@router.post("/event_faces")
+async def detect_and_store_faces(video: VideoInput):
+    """
+    Run theft + weapon detectors, and if either triggers,
+    detect faces, embed them, and store embeddings in ChromaDB.
+    """
+    img_bytes = _first_image_bytes(video)
+
+    # Convert bytes to OpenCV frame
+    npimg = np.frombuffer(img_bytes, np.uint8)
+    frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+    # Run theft and weapon detection
+    theft_res = await theft_model.async_detect_theft(img_bytes)
+    weapon_res = await weapon_model.async_detect_weapon(img_bytes)
+
+    theft_ok = theft_res.get("ok") and theft_res.get("detections")
+    weapon_ok = weapon_res.get("ok") and weapon_res.get("detections")
+
+    if not (theft_ok or weapon_ok):
+        return {
+            "event_triggered": False,
+            "message": "No theft or weapon event detected.",
+            "faces_stored": 0
+        }
+
+    event_type = "theft" if theft_ok else "weapon"
+    theft_conf = theft_res.get("confidence") if theft_ok else None
+    weapon_conf = weapon_res.get("confidence") if weapon_ok else None
+
+    stored_faces = process_faces_from_frame(
+        frame,
+        event_type=event_type,
+        theft_conf=theft_conf,
+        weapon_conf=weapon_conf
+    )
+
+    return {
+        "event_triggered": True,
+        "event_type": event_type,
+        "faces_stored": len(stored_faces),
+        "stored_faces": stored_faces
     }
