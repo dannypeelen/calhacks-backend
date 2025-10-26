@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -135,6 +136,9 @@ async def async_detect_theft(
 
     extra_input = {"conf_thresh": float(conf_thresh)}
     resp = await client.apredict_image(endpoint_url, image_b64, extra_input=extra_input)
+
+    # DEBUG log the raw Baseten JSON response
+    log.debug("Theft detection raw Baseten response: %s", json.dumps(resp, indent=2))
 
     detections = resp.get("detections") or resp.get("output") or resp.get("result")
     return {

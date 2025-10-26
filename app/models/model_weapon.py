@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -76,5 +77,9 @@ async def async_detect_weapon(frame: Any, endpoint: Optional[str] = None, **extr
     endpoint_url = endpoint or _settings.BASETEN_WEAPON_ENDPOINT or os.getenv("BASETEN_WEAPON_ENDPOINT", "")
     client = get_baseten_client()
     resp = await client.apredict_image(endpoint_url, image_b64, extra or None)
+    
+    # DEBUG log the raw Baseten JSON response
+    log.debug("Weapon detection raw Baseten response: %s", json.dumps(resp, indent=2))
+    
     det = resp.get("detections") or resp.get("output") or resp.get("result")
     return {"ok": bool(resp.get("ok", True)), "model": "baseten:weapon", "detections": det, "raw": resp}

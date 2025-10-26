@@ -187,6 +187,24 @@ class StreamProcessor:
     async def _publish(self, payload: Dict[str, Any]) -> None:
         if not self.publish_callbacks:
             return
+        
+        # INFO log when publishing each payload
+        results = payload.get("results", {})
+        face_results = results.get("face", {})
+        theft_results = results.get("theft", {})
+        weapon_results = results.get("weapon", {})
+        
+        face_ok = face_results.get("ok", False)
+        face_detections = len(face_results.get("detections", {}).get("faces", [])) if face_results.get("detections") else 0
+        theft_ok = theft_results.get("ok", False)
+        weapon_ok = weapon_results.get("ok", False)
+        
+        log.info(
+            "Publishing detection payload: face_ok=%s face_detections=%d theft_ok=%s weapon_ok=%s session=%s participant=%s",
+            face_ok, face_detections, theft_ok, weapon_ok, 
+            self.session_id, self.participant_sid
+        )
+        
         for cb in self.publish_callbacks:
             try:
                 await cb(payload)

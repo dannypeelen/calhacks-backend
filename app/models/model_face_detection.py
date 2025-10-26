@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -82,5 +83,9 @@ async def async_detect_face(frame: Any, endpoint: Optional[str] = None, **extra)
         resp = await client.apredict_image(resolved, image_b64, extra or None)
     else:
         resp = await client.apredict_face(image_b64, **extra)
+    
+    # DEBUG log the raw Baseten JSON response
+    log.debug("Face detection raw Baseten response: %s", json.dumps(resp, indent=2))
+    
     det = resp.get("detections") or resp.get("output") or resp.get("result")
     return {"ok": bool(resp.get("ok", True)), "model": "baseten:face", "detections": det, "raw": resp}
