@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # Optional LLMs
     CLAUDE_KEY: str = ""
 
+    # Streaming intervals
+    FACE_INTERVAL: float = 0.2
+    THREAT_INTERVAL: float = 0.5
+
     # General
     ENV: str = os.getenv("ENV", "development")
     # Pydantic v2 config

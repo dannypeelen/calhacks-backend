@@ -28,7 +28,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 from app.core.config import get_settings
 from app.core.logger import get_logger
-from app.services.analyzer import analyze_video
+from app.services.stream_processor import StreamProcessor
 
 # Optional imports; keep module import-safe even if SDK not installed yet
 try:
@@ -56,6 +56,7 @@ class LiveKitSession:
     data_publish_fn: Optional[Callable[[str], Awaitable[None]]] = None
     per_participant_ts: Dict[str, float] = field(default_factory=dict)
     running: bool = False
+    processor: Optional[StreamProcessor] = None
 
 
 class LiveKitManager:
@@ -155,72 +156,65 @@ class LiveKitManager:
 
         await room.connect(self._settings.LIVEKIT_URL, token)
 
-        # Prepare data channel publisher
-        async def _publish(msg: str) -> None:
+        async def _publish_json(payload: Dict[str, Any]) -> None:
+            msg = json.dumps(payload)
+            if session.data_publish_fn:
+                await session.data_publish_fn(msg)
+            if result_sink:
+                await result_sink(payload)
+
+        async def _data_channel_publish(msg: str) -> None:
             try:
-                payload = msg.encode("utf-8")
                 await room.local_participant.publish_data(
-                    payload, lk_rtc.DataPacketKind.RELIABLE
+                    msg.encode("utf-8"), lk_rtc.DataPacketKind.RELIABLE
                 )
             except Exception:
                 log.exception("Failed to publish data packet")
 
+        processor = StreamProcessor(
+            face_interval=self._settings.FACE_INTERVAL,
+            threat_interval=self._settings.THREAT_INTERVAL,
+            publish_callbacks=[_publish_json],
+            session_id=session_id,
+        )
+        await processor.start()
+
         session.room = room
-        session.data_publish_fn = _publish
+        session.data_publish_fn = _data_channel_publish
+        session.processor = processor
         session.running = True
         log.info("LiveKit session %s started for room=%s", session_id, room_name)
         return session_id
 
+    def get_processor(self, session_id: str) -> Optional[StreamProcessor]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return None
+        return session.processor
+
     async def _handle_video_frame(self, session_id: str, participant: Any, frame: Any, result_sink: Optional[DetectionSink]) -> None:
-        """Handle incoming frames with 1 FPS throttling and analysis."""
+        """Push frames into the stream processor."""
         session = self._sessions.get(session_id)
         if not session or not session.running:
             return
-        pid = getattr(participant, "sid", "?")
-        now = time.time()
-        last = session.per_participant_ts.get(pid, 0.0)
-        if now - last < 1.0:
+        if not session.processor:
             return
-        session.per_participant_ts[pid] = now
-
-        # Convert frame to JPEG base64
         try:
-            # frame.to_ndarray(format="bgr24") is common in livekit-rtc
-            import cv2  # local import to avoid global dependency
             import numpy as np  # type: ignore
 
             img = frame.to_ndarray(format="bgr24")  # type: ignore[attr-defined]
-            ok, enc = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-            if not ok:
-                log.warning("cv2.imencode failed for participant %s", pid)
-                return
-            image_b64 = base64.b64encode(enc.tobytes()).decode()
+            session.processor.participant_sid = getattr(participant, "sid", None)
+            session.processor.set_frame(img)
         except Exception:
-            log.exception("Failed to convert frame to JPEG")
-            return
-
-        # Call analyzer on a single frame
-        try:
-            payload = {"image_b64": image_b64}
-            result = await analyze_video(payload)
-        except Exception:
-            log.exception("Analyzer failed for participant %s", pid)
-            return
-
-        # Broadcast back via data channel and optional sink
-        try:
-            out = {"type": "detection", "session_id": session_id, "participant": pid, "result": result}
-            await self.send_data(session_id, out)
-            if result_sink:
-                await result_sink(out)
-        except Exception:
-            log.exception("Failed to forward analysis result")
+            log.exception("Failed to convert frame to ndarray")
 
     async def stop_room_session(self, session_id: str) -> None:
         session = self._sessions.get(session_id)
         if not session:
             return
         session.running = False
+        if session.processor:
+            await session.processor.stop()
         try:
             if session.room is not None:
                 await session.room.disconnect()

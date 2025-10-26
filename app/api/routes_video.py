@@ -1,5 +1,9 @@
+import base64
+
+import numpy as np
+import cv2
 from fastapi import APIRouter, File, UploadFile, WebSocket, HTTPException
-from app.services.video_processor import process_uploaded_video, process_webcam_frame
+from app.services.video_processor import process_uploaded_video
 from app.services.livekit_manager import get_livekit_manager
 from app.core.logger import get_logger
 from app.core.config import get_settings
@@ -38,6 +42,21 @@ async def video_stream(websocket: WebSocket):
             await websocket.send_json(payload)
         except Exception:
             log.exception("Failed sending WS payload")
+    async def enqueue_frame(data: str):
+        if not active_session:
+            await websocket.send_json({"ok": False, "error": "session not started"})
+            return
+        processor = lk.get_processor(active_session)
+        if not processor:
+            await websocket.send_json({"ok": False, "error": "processor unavailable"})
+            return
+        frame = _decode_base64_image(data)
+        if frame is None:
+            await websocket.send_json({"ok": False, "error": "invalid frame data"})
+            return
+        processor.participant_sid = "ws"
+        processor.set_frame(frame)
+        await websocket.send_json({"ok": True, "queued": True})
 
     try:
         while True:
@@ -71,13 +90,11 @@ async def video_stream(websocket: WebSocket):
                 await websocket.send_json({"ok": True})
             elif action == "frame":
                 data = payload.get("data") if payload else msg
-                results = await process_webcam_frame(data)
-                await websocket.send_json(results)
+                await enqueue_frame(data)
             else:
                 # Legacy path: treat raw text as base64 frame
                 if payload is None:
-                    results = await process_webcam_frame(msg)
-                    await websocket.send_json(results)
+                    await enqueue_frame(msg)
                 else:
                     await websocket.send_json({"ok": False, "error": "unknown action"})
     except Exception:
