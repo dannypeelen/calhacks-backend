@@ -159,6 +159,8 @@ async def detect_and_store_faces(video: VideoInput):
     event_type = "theft" if theft_ok else "weapon"
     theft_conf = theft_res.get("confidence") if theft_ok else None
     weapon_conf = weapon_res.get("confidence") if weapon_ok else None
+    theft_boxes = (theft_res.get("coordinates") or {}).get("boxes", []) if theft_ok else []
+    weapon_boxes = (weapon_res.get("coordinates") or {}).get("boxes", []) if weapon_ok else []
 
     stored_faces = process_faces_from_frame(
         frame,
@@ -206,6 +208,10 @@ async def detect_and_store_faces(video: VideoInput):
         "faces_detected": {
             "status": "completed",
             "faceID": faces_data[0]["faceID"] if faces_data else None
+        },
+        "detection_regions": {
+            "theft": theft_boxes,
+            "weapon": weapon_boxes,
         }
     }
 
@@ -216,5 +222,9 @@ async def detect_and_store_faces(video: VideoInput):
         "event_triggered": True,
         "event_type": event_type,
         "faces_stored": len(stored_faces),
+        "detection_boxes": {
+            "theft": theft_boxes,
+            "weapon": weapon_boxes,
+        },
         "message": f"Successfully processed {len(stored_faces)} faces for {event_type} event"
     }

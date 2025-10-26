@@ -16,14 +16,29 @@ class FakeClient:
 async def test_model_theft_adapter_returns_normalized(monkeypatch):
     from app.models import model_theft
 
-    payload = {"result": {"score": 0.66, "label": "theft"}}
+    payload = {
+        "detections": [
+            {
+                "box": {"x1": 0, "y1": 0, "x2": 10, "y2": 10},
+                "center": {"cx": 5, "cy": 5},
+                "size": {"w": 10, "h": 10},
+                "confidence": 0.66,
+                "class_id": 1,
+                "class_name": "shoplifting",
+            }
+        ],
+        "meta": {"num_detections": 1},
+    }
     monkeypatch.setattr(model_theft, "get_baseten_client", lambda: FakeClient(payload))
 
     # Provide raw bytes; adapter handles base64 + client call
     out = await model_theft.async_detect_theft(b"bytes")
     assert out["ok"] is True
     assert out["model"] == "baseten:theft"
-    assert out["detections"] == payload["result"]
+    assert out["detections"] == payload["detections"]
+    assert out["confidence"] == 0.66
+    assert out["num_detections"] == 1
+    assert out["coordinates"]["boxes"][0]["x1"] == 0
     assert out["raw"] == payload
 
 

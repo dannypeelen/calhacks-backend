@@ -7,7 +7,26 @@ from app.services.analyzer import analyze_video
 @pytest.mark.asyncio
 async def test_analyze_single_base64(monkeypatch):
     async def fake_theft(_bytes):
-        return {"ok": True, "detections": {"score": 0.6}, "model": "baseten:theft", "raw": {}}
+        detection = {
+            "box": {"x1": 0, "y1": 0, "x2": 10, "y2": 10},
+            "center": {"cx": 5, "cy": 5},
+            "size": {"w": 10, "h": 10},
+            "confidence": 0.6,
+            "class_id": 1,
+            "class_name": "shoplifting",
+        }
+        return {
+            "ok": True,
+            "detections": [detection],
+            "confidence": 0.6,
+            "coordinates": {
+                "boxes": [detection["box"]],
+                "centers": [detection["center"]],
+                "sizes": [detection["size"]],
+            },
+            "model": "baseten:theft",
+            "raw": {},
+        }
 
     async def fake_weapon(_bytes, **kwargs):
         return {"ok": True, "detections": {"score": 0.2}, "model": "baseten:weapon", "raw": {}}
@@ -27,7 +46,26 @@ async def test_analyze_single_base64(monkeypatch):
 @pytest.mark.asyncio
 async def test_analyze_path_list(tmp_path, monkeypatch):
     async def fake_theft(_bytes):
-        return {"ok": True, "detections": {"score": 0.0}, "model": "baseten:theft", "raw": {}}
+        detection = {
+            "box": {"x1": 0, "y1": 0, "x2": 10, "y2": 10},
+            "center": {"cx": 5, "cy": 5},
+            "size": {"w": 10, "h": 10},
+            "confidence": 0.0,
+            "class_id": 0,
+            "class_name": "normal",
+        }
+        return {
+            "ok": True,
+            "detections": [detection],
+            "confidence": 0.0,
+            "coordinates": {
+                "boxes": [detection["box"]],
+                "centers": [detection["center"]],
+                "sizes": [detection["size"]],
+            },
+            "model": "baseten:theft",
+            "raw": {},
+        }
 
     async def fake_weapon(_bytes, **kwargs):
         return {"ok": True, "detections": {"score": 1.0}, "model": "baseten:weapon", "raw": {}}

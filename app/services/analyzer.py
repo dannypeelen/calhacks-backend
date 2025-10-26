@@ -101,13 +101,9 @@ def _threat_score_simple(theft: Dict[str, Any], weapon: Dict[str, Any]) -> int:
     for src, name in ((theft, "theft"), (weapon, "weapon")):
         if not src or not src.get("ok", True):
             continue
-        det = src.get("detections")
-        if isinstance(det, dict) and "score" in det:
-            val = float(det.get("score", 0))
-        elif isinstance(det, list) and det and isinstance(det[0], dict) and "score" in det[0]:
-            val = float(det[0].get("score", 0))
-        else:
-            val = 0.0
+        val = _best_detection_score(src)
+        if val is None:
+            continue
         if name == "theft":
             theft_score = val
         else:
@@ -120,6 +116,45 @@ def _threat_score_simple(theft: Dict[str, Any], weapon: Dict[str, Any]) -> int:
         score += min(max(weapon_score, 0.0), 1.0) * 4.0
 
     return int(round(min(score, 10.0)))
+
+
+def _best_detection_score(result: Dict[str, Any]) -> Optional[float]:
+    """Extract the most confident score/confidence value from a model result."""
+    for key in ("confidence", "score"):
+        value = result.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+
+    detections = result.get("detections")
+    if isinstance(detections, dict):
+        for key in ("confidence", "conf", "score"):
+            if key in detections and detections[key] is not None:
+                try:
+                    return float(detections[key])
+                except (TypeError, ValueError):
+                    continue
+        return None
+
+    if isinstance(detections, list):
+        best = None
+        for det in detections:
+            if not isinstance(det, dict):
+                continue
+            for key in ("confidence", "conf", "score"):
+                if key in det and det[key] is not None:
+                    try:
+                        val = float(det[key])
+                    except (TypeError, ValueError):
+                        continue
+                    if best is None or val > best:
+                        best = val
+        return best
+
+    return None
 
 
 async def analyze_video(video: Any) -> Dict[str, Any]:

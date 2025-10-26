@@ -54,7 +54,7 @@ class BasetenClient:
             "Authorization": f"Api-Key {self.api_key}",
             "Content-Type": "application/json",
         }
-        payload: Dict[str, Any] = {"input": {"image": image_b64}}
+        payload: Dict[str, Any] = {"input": {"image_base64": image_b64, "image": image_b64}}
         if extra_input:
             payload["input"].update(extra_input)
 
@@ -74,7 +74,7 @@ class BasetenClient:
     # -------------------------
     async def apredict_theft(self, image_b64: str, conf_thresh: float = 0.5) -> Dict[str, Any]:
         url = self._settings.BASETEN_THEFT_ENDPOINT or os.getenv("BASETEN_THEFT_ENDPOINT", "")
-        extra = {"conf_thresh": float(conf_thresh)}
+        extra = {"conf_thresh": float(conf_thresh), "conf": float(conf_thresh)}
         return await self.apredict_image(url, image_b64, extra)
 
     async def apredict_weapon(self, image_b64: str, **extra: Any) -> Dict[str, Any]:
