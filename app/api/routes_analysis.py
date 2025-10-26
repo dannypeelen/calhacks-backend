@@ -9,6 +9,7 @@ from pathlib import Path
 import base64
 import numpy as np
 import cv2
+from datetime import datetime
 from app.services.face_embedder import process_faces_from_frame
 
 router = APIRouter()
@@ -124,6 +125,7 @@ async def detect_and_store_faces(video: VideoInput):
     """
     Run theft + weapon detectors, and if either triggers,
     detect faces, embed them, and store embeddings in ChromaDB.
+    Returns structured data matching the Convex schema format.
     """
     img_bytes = _first_image_bytes(video)
 
@@ -140,7 +142,16 @@ async def detect_and_store_faces(video: VideoInput):
 
     if not (theft_ok or weapon_ok):
         return {
-            "event_triggered": False,
+            "alerts": [],
+            "faces": [],
+            "footageAnalysis": {
+                "detectionType": "normal",
+                "timestamps": [],
+                "faces_detected": {
+                    "status": "completed",
+                    "faceID": None
+                }
+            },
             "message": "No theft or weapon event detected.",
             "faces_stored": 0
         }
@@ -156,9 +167,54 @@ async def detect_and_store_faces(video: VideoInput):
         weapon_conf=weapon_conf
     )
 
+    # Structure response to match Convex schema
+    faces_data = []
+    alerts_data = []
+
+    for face in stored_faces:
+        # Format face data for Convex faces table
+        face_record = {
+            "vectors": face["vectors"],
+            "faceID": face["faceID"],
+            "faceUrl": face["faceUrl"],
+            "createdAt": face["createdAt"],
+            "threatType": face["threatType"]
+        }
+        faces_data.append(face_record)
+
+        # Create corresponding alert record
+        alert_record = {
+            "type": face["threatType"],
+            "faceID": face["faceID"],
+            "summary": f"Face detected during {face['threatType']} event",
+            "imageUrl": face["faceUrl"],  # Can be populated with actual image URL
+            "createdAt": face["createdAt"]
+        }
+        alerts_data.append(alert_record)
+
+    # Create footage analysis record
+    footage_analysis = {
+        "detectionType": f"{event_type.title()} Detection",
+        "timestamps": [
+            {
+                "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
+                "action": event_type,
+                "description": f"{event_type.title()} event detected with {len(stored_faces)} faces identified",
+                "severity": "high" if len(stored_faces) > 0 else "medium"
+            }
+        ],
+        "faces_detected": {
+            "status": "completed",
+            "faceID": faces_data[0]["faceID"] if faces_data else None
+        }
+    }
+
     return {
+        "alerts": alerts_data,
+        "faces": faces_data,
+        "footageAnalysis": footage_analysis,
         "event_triggered": True,
         "event_type": event_type,
         "faces_stored": len(stored_faces),
-        "stored_faces": stored_faces
+        "message": f"Successfully processed {len(stored_faces)} faces for {event_type} event"
     }

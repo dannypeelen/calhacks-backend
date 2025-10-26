@@ -42,21 +42,31 @@ def get_embedding(face_bgr: np.ndarray) -> np.ndarray:
     return emb
 
 
-def store_face_embedding(embedding: np.ndarray, meta: dict) -> str:
-    """Store embedding vector and metadata in ChromaDB."""
+def store_face_embedding(embedding: np.ndarray, meta: dict) -> dict:
+    """Store embedding vector and metadata in ChromaDB and return structured face data."""
     face_id = str(uuid.uuid4())
+
+    # Store in ChromaDB
     collection.add(
         ids=[face_id],
         embeddings=[embedding.tolist()],
         metadatas=[meta]
     )
-    return face_id
+
+    # Return structured data matching the Convex schema format exactly
+    return {
+        "vectors": embedding.tolist(),
+        "faceID": face_id,
+        "faceUrl": meta.get("face_url", ""),
+        "createdAt": meta.get("timestamp", datetime.utcnow().isoformat()),
+        "threatType": meta.get("event_type")
+    }
 
 
 def process_faces_from_frame(frame: np.ndarray, event_type: str, theft_conf=None, weapon_conf=None):
     """
     Run YOLOv8 face detection, generate embeddings, and store in ChromaDB.
-    Returns list of stored faces and metadata.
+    Returns list of stored faces with structured data matching Convex schema.
     """
     results = yolo_face.predict(frame, conf=0.5, device=device)
     stored_faces = []
@@ -79,9 +89,12 @@ def process_faces_from_frame(frame: np.ndarray, event_type: str, theft_conf=None
                 "event_type": event_type,
                 "theft_confidence": theft_conf,
                 "weapon_confidence": weapon_conf,
-                "face_confidence": float(conf)
+                "face_confidence": float(conf),
+                "bbox": box.tolist(),  # Store bounding box coordinates
+                "face_url": ""  # Placeholder for face URL - can be populated later
             }
-            face_id = store_face_embedding(embedding, meta)
-            stored_faces.append({"face_id": face_id, "metadata": meta})
+
+            face_data = store_face_embedding(embedding, meta)
+            stored_faces.append(face_data)
 
     return stored_faces
