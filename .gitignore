@@ -1,2 +1,4 @@
 .env
 .venv/*
+tools
+tools/*
