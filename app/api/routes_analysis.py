@@ -8,6 +8,10 @@ from app.models import model_face_detection as face_model
 from app.core.logger import get_logger
 from pathlib import Path
 import base64
+import numpy as np
+import cv2
+from datetime import datetime
+from app.services.face_embedder import process_faces_from_frame
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -115,4 +119,113 @@ async def debug_baseten_models(video: VideoInput, conf_thresh: float = Query(0.5
             "weapon": weapon_res,
             "face": face_res,
         }
+    }
+
+@router.post("/event_faces")
+async def detect_and_store_faces(video: VideoInput):
+    """
+    Run theft + weapon detectors, and if either triggers,
+    detect faces, embed them, and store embeddings in ChromaDB.
+    Returns structured data matching the Convex schema format.
+    """
+    img_bytes = _first_image_bytes(video)
+
+    # Convert bytes to OpenCV frame
+    npimg = np.frombuffer(img_bytes, np.uint8)
+    frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+    # Run theft and weapon detection
+    theft_res = await theft_model.async_detect_theft(img_bytes)
+    weapon_res = await weapon_model.async_detect_weapon(img_bytes)
+
+    theft_ok = theft_res.get("ok") and theft_res.get("detections")
+    weapon_ok = weapon_res.get("ok") and weapon_res.get("detections")
+
+    if not (theft_ok or weapon_ok):
+        return {
+            "alerts": [],
+            "faces": [],
+            "footageAnalysis": {
+                "detectionType": "normal",
+                "timestamps": [],
+                "faces_detected": {
+                    "status": "completed",
+                    "faceID": None
+                }
+            },
+            "message": "No theft or weapon event detected.",
+            "faces_stored": 0
+        }
+
+    event_type = "theft" if theft_ok else "weapon"
+    theft_conf = theft_res.get("confidence") if theft_ok else None
+    weapon_conf = weapon_res.get("confidence") if weapon_ok else None
+    theft_boxes = (theft_res.get("coordinates") or {}).get("boxes", []) if theft_ok else []
+    weapon_boxes = (weapon_res.get("coordinates") or {}).get("boxes", []) if weapon_ok else []
+
+    stored_faces = process_faces_from_frame(
+        frame,
+        event_type=event_type,
+        theft_conf=theft_conf,
+        weapon_conf=weapon_conf
+    )
+
+    # Structure response to match Convex schema
+    faces_data = []
+    alerts_data = []
+
+    for face in stored_faces:
+        # Format face data for Convex faces table
+        face_record = {
+            "vectors": face["vectors"],
+            "faceID": face["faceID"],
+            "faceUrl": face["faceUrl"],
+            "createdAt": face["createdAt"],
+            "threatType": face["threatType"]
+        }
+        faces_data.append(face_record)
+
+        # Create corresponding alert record
+        alert_record = {
+            "type": face["threatType"],
+            "faceID": face["faceID"],
+            "summary": f"Face detected during {face['threatType']} event",
+            "imageUrl": face["faceUrl"],  # Can be populated with actual image URL
+            "createdAt": face["createdAt"]
+        }
+        alerts_data.append(alert_record)
+
+    # Create footage analysis record
+    footage_analysis = {
+        "detectionType": f"{event_type.title()} Detection",
+        "timestamps": [
+            {
+                "timestamp": datetime.utcnow().strftime("%H:%M:%S"),
+                "action": event_type,
+                "description": f"{event_type.title()} event detected with {len(stored_faces)} faces identified",
+                "severity": "high" if len(stored_faces) > 0 else "medium"
+            }
+        ],
+        "faces_detected": {
+            "status": "completed",
+            "faceID": faces_data[0]["faceID"] if faces_data else None
+        },
+        "detection_regions": {
+            "theft": theft_boxes,
+            "weapon": weapon_boxes,
+        }
+    }
+
+    return {
+        "alerts": alerts_data,
+        "faces": faces_data,
+        "footageAnalysis": footage_analysis,
+        "event_triggered": True,
+        "event_type": event_type,
+        "faces_stored": len(stored_faces),
+        "detection_boxes": {
+            "theft": theft_boxes,
+            "weapon": weapon_boxes,
+        },
+        "message": f"Successfully processed {len(stored_faces)} faces for {event_type} event"
     }

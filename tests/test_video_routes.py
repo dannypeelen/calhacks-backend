@@ -28,7 +28,26 @@ def test_analysis_route_with_b64(monkeypatch):
     client = TestClient(app)
 
     async def fake_theft(_bytes):
-        return {"ok": True, "detections": {"score": 0.5}, "model": "baseten:theft", "raw": {}}
+        detection = {
+            "box": {"x1": 0, "y1": 0, "x2": 10, "y2": 10},
+            "center": {"cx": 5, "cy": 5},
+            "size": {"w": 10, "h": 10},
+            "confidence": 0.5,
+            "class_id": 1,
+            "class_name": "shoplifting",
+        }
+        return {
+            "ok": True,
+            "detections": [detection],
+            "confidence": 0.5,
+            "coordinates": {
+                "boxes": [detection["box"]],
+                "centers": [detection["center"]],
+                "sizes": [detection["size"]],
+            },
+            "model": "baseten:theft",
+            "raw": {},
+        }
 
     async def fake_weapon(_bytes, **kwargs):
         return {"ok": True, "detections": {"score": 0.5}, "model": "baseten:weapon", "raw": {}}

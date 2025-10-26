@@ -1,11 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.api import routes_video, routes_analysis, routes_threats, routes_health
 from app.workers.background_tasks import get_task_runner
 from app.workers.scheduler import get_scheduler, cleanup_tmp
 from app.services.baseten_client import get_baseten_client
-
+from app.api import routes_video, routes_analysis, routes_threats, routes_health, routes_websocket
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,7 +35,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict in production
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,7 +46,7 @@ app.include_router(routes_video.router, prefix="/video", tags=["Video"])
 app.include_router(routes_analysis.router, prefix="/analysis", tags=["Analysis"])
 app.include_router(routes_threats.router, prefix="/threats", tags=["Threats"])
 app.include_router(routes_health.router, prefix="/health", tags=["Health"])
-
+app.include_router(routes_websocket.router, tags=["WebSocket"])
 
 @app.get("/")
 def root():
