@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
+from fastapi import File, UploadFile
 from app.services.analyzer import analyze_video
 from app.schemas.video import VideoInput
 from app.models import model_theft as theft_model
@@ -68,26 +69,26 @@ def _first_image_bytes(video: VideoInput) -> bytes:
 
 
 @router.post("/theft")
-async def detect_theft_only(video: VideoInput, conf_thresh: float = Query(0.5, ge=0.0, le=1.0)):
+async def detect_theft_only(file: UploadFile = File(...), conf_thresh: float = Query(0.5, ge=0.0, le=1.0)):
     """Run only the theft detector on the given frame and return its raw result."""
-    img = _first_image_bytes(video)
-    result = await theft_model.async_detect_theft(img, conf_thresh=conf_thresh)
+    img_bytes = await file.read()
+    result = await theft_model.async_detect_theft(img_bytes, conf_thresh=conf_thresh)
     return result
 
 
 @router.post("/weapon")
-async def detect_weapon_only(video: VideoInput):
+async def detect_weapon_only(file: UploadFile = File(...)):
     """Run only the weapon detector on the given frame and return its raw result."""
-    img = _first_image_bytes(video)
-    result = await weapon_model.async_detect_weapon(img)
+    img_bytes = await file.read()
+    result = await weapon_model.async_detect_weapon(img_bytes)
     return result
 
 
 @router.post("/face")
-async def detect_face_only(video: VideoInput):
+async def detect_face_only(file: UploadFile = File(...)):
     """Run only the face detector on the given frame and return its raw result."""
-    img = _first_image_bytes(video)
-    result = await face_model.async_detect_face(img)
+    img_bytes = await file.read()
+    result = await face_model.async_detect_face(img_bytes)
     return result
 
 
